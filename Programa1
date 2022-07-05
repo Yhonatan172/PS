@@ -1,0 +1,206 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/**
+ *
+ * @author Fk-Play
+ */
+import java.util.ArrayList;
+import java.util.List;
+
+public class LockManager {
+    private static LockManager single_instance = null;
+    private static List<Account> accountLocks = new ArrayList<Account>();
+
+    public static LockManager getInstance() {
+        if (single_instance == null)
+            single_instance = new LockManager();
+
+        return single_instance;
+    }
+
+    private LockManager() {
+        accountLocks.clear();
+    }
+
+    public boolean isLocked(Account account) {
+
+        return accountLocks.contains(account);
+    }
+
+    public boolean isLocked() {
+
+        return !accountLocks.isEmpty();
+    }
+
+    public void lock(Account account) {
+        accountLocks.add(account);
+    }
+
+    public void unLock(Account account) {
+        accountLocks.remove(account);
+    }
+
+    public void unLockAll() {
+        accountLocks.clear();
+    }
+}
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ *
+ * @author Fk-Play
+ */
+public class Main {
+    public void executeTransacType3() {
+        
+        Account a = new Account(100);
+        Account b = new Account(200);
+        Account c = new Account(300);
+
+        System.out.println("a:" + a.getBalance());
+        System.out.println("b:" + b.getBalance());
+        System.out.println("c:" + c.getBalance());
+
+        Thread T = new Thread(new TransactionType3(b, a));
+        T.setName("T");
+        Thread U = new Thread(new TransactionType3(b, c));
+        U.setName("U");
+
+        T.start();            
+        T.setPriority(2);
+        U.start();            
+        U.setPriority(3);       
+
+    }
+
+    public static void main(String[] args) {
+        Main m = new Main();
+        for (int i = 0; i < 10; i++) {
+            System.out.println("-------------Batch " + i);
+            m.executeTransacType3();
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+
+
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/**
+ *
+ * @author Fk-Play
+ */
+public class TransactionType3 implements Runnable {
+    public static Object lockingObject = new Object();
+    private LockManager lockManager = LockManager.getInstance();
+    private Account account_increase;
+    private Account account_debit;
+    
+    //Declaramos la variable lock
+    Lock lock = new ReentrantLock();
+
+    public TransactionType3(Account account_increase, Account account_debit) {
+        // Lo colocamos aqui para que solo una transacción pueda modificar los valores a la vez.
+
+                this.account_increase = account_increase;
+                this.account_debit = account_debit;
+    }
+
+    @Override
+    public void run() {
+        double bal = 0;
+        waiting();
+        
+        if (lock.tryLock()) {
+            try {
+                
+                synchronized (lockingObject) {
+                    lockManager.lock(account_increase);
+                    bal = account_increase.getBalance();
+                    System.out.println(Thread.currentThread().getName() + "|op1|bal:" + bal);
+
+                }
+
+                synchronized (lockingObject) {
+                    lockManager.lock(account_increase);
+                    account_increase.setBalance(bal * 1.1);
+                    System.out.println(Thread.currentThread().getName() + "|op2|bal*1.1:" + (bal * 1.1));
+                }
+
+                synchronized (lockingObject) {
+                    lockManager.lock(account_debit);
+                    account_debit.setBalance(bal / 10);
+                    System.out.println(Thread.currentThread().getName() + "|op3|bal/10:" + (bal / 10));
+
+                    lockManager.unLockAll();
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    public void waiting() {
+        while (lockManager.isLocked()) {
+            try {
+                System.out.println(Thread.currentThread().getName() + " ... waiting");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/**
+ *
+ * @author Fk-Play
+ */
+public class Account {
+    private double balance;
+
+    public Account() {
+        balance = 0;
+    }
+
+    public Account(double initial_balance) {
+        this.balance = initial_balance;
+    }
+
+    public double getBalance() {
+        return balance;
+    }
+
+    public void setBalance(double amount) {
+        balance = amount;
+    }
+
+    public void withdraw(double amount) {
+        if (balance >= amount)
+            balance = balance - amount;
+    }
+}
+
